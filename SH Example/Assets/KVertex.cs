@@ -5,7 +5,9 @@ using UnityEngine;
 [RequireComponent(typeof(MeshRenderer))]
 public class KVertex : MonoBehaviour {
 
+    public float u, v;
     public float alpha, beta;
+    public TextMesh textMesh;
     MeshRenderer m_renderer;
     public Vector3 m_color;
     private void Awake()

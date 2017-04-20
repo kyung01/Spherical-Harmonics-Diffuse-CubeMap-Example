@@ -11,6 +11,6 @@ public class SimpleRotation : MonoBehaviour {
 	
 	// Update is called once per frame
 	void Update () {
-        this.transform.rotation = Quaternion.Euler(0, this.transform.rotation.eulerAngles.y+Time.deltaTime*10, 0);	
+        this.transform.Rotate(new Vector3(Time.deltaTime * 10, Time.deltaTime*10,Time.deltaTime*10 ) );	
 	}
 }

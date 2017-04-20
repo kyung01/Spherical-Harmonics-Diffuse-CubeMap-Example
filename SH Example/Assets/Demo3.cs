@@ -5,9 +5,10 @@ using UnityEngine;
 public class Demo3 : MonoBehaviour
 {
     public KVertex P_VERTEX;
+    public Texture2D m_textureRight, m_textureLeft, m_textureUp, m_textureDown, m_textureFront, m_textureBack;
     public Texture2D m_texture;
     public int iterationCount, diffuseVertexCount;
-    public SimpleRotation m_sphereCubeMap, m_sphereCubeMapDiffuse;
+    public SimpleRotation m_sphereCubeMap, m_sphereCubeMapDiffuse,m_sphereDiffuse2;
     int iterationCountOld = 0, diffuseVertexCountOld = 0;
     List<Vector3> coefficientsTexture = new List<Vector3>() { new Vector3(), new Vector3(), new Vector3(), new Vector3(), new Vector3(), new Vector3(), new Vector3(), new Vector3(), new Vector3(), };
 
@@ -18,6 +19,7 @@ public class Demo3 : MonoBehaviour
     // Use this for initialization
     List<KVertex> m_vertexs = new List<KVertex>();
     List<KVertex> m_vertexsDiffuse = new List<KVertex>();
+    List<KVertex> m_vertexsDiffuse2 = new List<KVertex>();
     void Start()
     {
 
@@ -51,6 +53,153 @@ public class Demo3 : MonoBehaviour
         vertex.setColor(new Color(color.x * scale, color.y * scale, color.z * scale));
 
     }
+    //value has to be -1 ~ 1
+    //also the coordinate has to be in the middle of subtended area
+    static float AreaElement(float x, float y)
+    {
+        return Mathf.Atan2(x * y, Mathf.Sqrt(x * x + y * y + 1));
+    }
+    float TexelCoordSolidAngle2(float U, float V, int a_Size)
+    {
+        //scale up to [-1, 1] range (inclusive), offset by 0.5 to point to texel center.
+        //float U = (2.0f * ((float)a_U + 0.5f) / (float)a_Size) - 1.0f;
+        //float V = (2.0f * ((float)a_V + 0.5f) / (float)a_Size) - 1.0f;
+
+        float InvResolution = (2.0f / a_Size) * 0.5f;
+
+        float x0 = U - InvResolution;
+        float y0 = V - InvResolution;
+        float x1 = U + InvResolution;
+        float y1 = V + InvResolution;
+        float SolidAngle = AreaElement(x0, y0) - AreaElement(x1, y0) + AreaElement(x1, y1) - AreaElement(x0, y1);
+
+        return SolidAngle;
+    }
+    KVertex createSphereAre(int face, int surfaceDividedBy, float u, float v, float pixelSize, List<Vector3> coefficients)
+    {
+        var vertex = Instantiate<KVertex>(P_VERTEX);
+
+        vertex.transform.parent = m_sphereCubeMap.transform;
+        Vector3 normal = new Vector3();
+        float
+            xDir = -1 + (u * 2) + pixelSize,
+            yDir = -1 + (v * 2) + pixelSize;
+        Texture2D texture = null;
+        switch (face)
+        {
+            case 0: texture = m_textureRight; break; // +X
+            case 1: texture = m_textureLeft; break; // -X
+            case 2: texture = m_textureUp; break; // +Y
+            case 3: texture = m_textureDown; break; // -Y
+            case 4: texture = m_textureFront; break; // +Z
+            case 5: texture = m_textureBack; break; // -Z
+        }
+        switch (face)
+        {
+            case 0: normal = new Vector3(+1, +yDir, -xDir); break; // +X
+            case 1: normal = new Vector3(-1, +yDir, +xDir); break; // -X
+            case 2: normal = new Vector3(+xDir, +1, -yDir); break; // +Y
+            case 3: normal = new Vector3(+xDir, -1, +yDir); break; // -Y
+            case 4: normal = new Vector3(+xDir, yDir, +1); break; // +Z
+            case 5: normal = new Vector3(-xDir, yDir, -1); break; // -Z
+        }
+        normal.Normalize();
+        vertex.transform.position = new Vector3(-2, 0, 0) + normal;
+        vertex.transform.LookAt(new Vector3(-2, 0, 0));
+        vertex.setColor(texture.GetPixel((int)(u * texture.width), (int)((v) * texture.height)));
+
+        float A0 = 1.0f;// 3.141593f;
+        const float A1 = 1.0f;// 2.095395f; // Stick with 1.0 for all of these!!!
+        const float A2 = 1.0f; //0.785398f;
+
+        float domega = TexelCoordSolidAngle2(u, v, surfaceDividedBy);
+        coefficients[0] += 0.282095f * A0 * domega * vertex.m_color;
+
+        // Band 1
+        coefficients[1] += 0.488603f * normal.y * A1 * domega * vertex.m_color;
+        coefficients[2] += 0.488603f * normal.z * A1 * domega * vertex.m_color;
+        coefficients[3] += 0.488603f * normal.x * A1 * domega * vertex.m_color;
+
+        // Band 2
+        coefficients[4] += 1.092548f * normal.x * normal.y * A2 * domega * vertex.m_color;
+        coefficients[5] += 1.092548f * normal.y * normal.z * A2 * domega * vertex.m_color;
+        coefficients[6] += 0.315392f * (3.0f * normal.z * normal.z - 1.0f) * A2 * domega * vertex.m_color;
+        coefficients[7] += 1.092548f * normal.x * normal.z * A2 * domega * vertex.m_color;
+        coefficients[8] += 0.546274f * (normal.x * normal.x - normal.y * normal.y) * A2 * domega * vertex.m_color;
+        return vertex;
+    }
+   
+    void updateColor1(KVertex vertex, List<Vector3> coefficients)
+    {
+        var vertexSH = vertex.getSH();
+        float a0 = 3.141593f;
+        float a1 = 2.094395f;
+        float a2 = 0.785398f;
+
+        Vector3 color =
+            a0 * vertexSH[0] * coefficients[0] +
+            a1 * vertexSH[1] * coefficients[1] +
+            a1 * vertexSH[2] * coefficients[2] +
+            a1 * vertexSH[3] * coefficients[3] +
+            a2 * vertexSH[4] * coefficients[4] +
+            a2 * vertexSH[5] * coefficients[5] +
+            a2 * vertexSH[6] * coefficients[6] +
+            a2 * vertexSH[7] * coefficients[7] +
+            a2 * vertexSH[8] * coefficients[8];
+        //color *= 0.5f;
+        vertex.setColor(new Color(color.x, color.y, color.z));
+    }
+    void updateColor2(KVertex vertex, List<Vector3> coefficients)
+    {
+        /*
+         * 
+        var vertexSH = vertex.getSH();
+        float a0 = 3.141593f;
+        float a1 = 2.094395f;
+        float a2 = 0.785398f;
+
+        Vector3 color =
+            a0 * vertexSH[0] * coefficients[0] +
+            a1 * vertexSH[1] * coefficients[1] +
+            a1 * vertexSH[2] * coefficients[2] +
+            a1 * vertexSH[3] * coefficients[3] +
+            a2 * vertexSH[4] * coefficients[4] +
+            a2 * vertexSH[5] * coefficients[5] +
+            a2 * vertexSH[6] * coefficients[6] +
+            a2 * vertexSH[7] * coefficients[7] +
+            a2 * vertexSH[8] * coefficients[8];
+        vertex.setColor(new Color(color.x, color.y, color.z));
+         * */
+        var vertexSH = vertex.getSH();
+        var normal = vertex.Normal;
+        float c1 = 0.429043f;
+        float c2 = 0.511665f;
+        float c3 = 0.743125f;
+        float c4 = 0.886227f;
+        float c5 = 0.247708f;
+
+        var L00 = coefficients[0];
+        var L1_1 = coefficients[1];
+        var L10 = coefficients[2];
+        var L11 = coefficients[3];
+        var L2_2 = coefficients[4];
+        var L2_1 = coefficients[5];
+        var L20 = coefficients[6];
+        var L21 = coefficients[7];
+        var L22 = coefficients[8];
+
+        Vector3 irradianceColor =
+            c1 * L22 * (normal.x * normal.x - normal.y * normal.y) +
+            c3 * L20 * (normal.z * normal.z) +
+            c4 * L00 -
+            c5 * L20 +
+            2 * c1 * (L2_2 * normal.x * normal.y + L21 * normal.x * normal.z + L2_1 * normal.y * normal.z) +
+            2 * c2 * (L11 * normal.x + L1_1 * normal.y + L10 * normal.z);
+
+
+        vertex.setColor(new Color(irradianceColor.x, irradianceColor.y, irradianceColor.z));
+
+    }
     // Update is called once per frame
     void Update()
     {
@@ -74,6 +223,44 @@ public class Demo3 : MonoBehaviour
             diffuseVertexCount--;
 
         }
+
+        if (iterationCountOld != iterationCount)
+        {
+            iterationCountOld = iterationCount;
+            for (int i = 0; i < m_vertexs.Count; i++)
+            {
+                Destroy(m_vertexs[i].gameObject);
+            }
+            m_vertexs.Clear();
+            coefficientsTexture = new List<Vector3>();
+            for (int i = 0; i < 9; i++)
+            {
+                coefficientsTexture.Add(new Vector3());
+            }
+            for (int face = 0; face < 6; face++)
+            {
+                float pixelSize = 1.0f / (iterationCount);
+                for (int i = 0; i < iterationCount; i++)
+                {
+                    for (int j = 0; j < iterationCount; j++)
+                    {
+                        float u = ((float)i) * pixelSize;
+                        float v = ((float)j) * pixelSize;
+                        m_vertexs.Add(
+                        createSphereAre(face, iterationCount,
+                            u, v,
+                            pixelSize, coefficientsTexture)
+                            );
+
+                    }
+                }
+
+
+
+            }
+            for (int i = 0; i < 9; i++) Debug.Log("Cof " + i + " : " + coefficientsTexture[i].x + " , " + coefficientsTexture[i].y + " , " + coefficientsTexture[i].z);
+        }
+
         if (diffuseVertexCountOld != diffuseVertexCount)
         {
             diffuseVertexCountOld = diffuseVertexCount;
@@ -89,103 +276,41 @@ public class Demo3 : MonoBehaviour
                     float alpha = ((i + 1) / (diffuseVertexCount + 1)) * (3.14f);
                     float beta = ((j) / (diffuseVertexCount * 2)) * (3.14f * 2);
                     var vert = Instantiate<KVertex>(P_VERTEX);
-                    vert.alpha = alpha;
-                    vert.beta = beta;
                     vert.transform.parent = m_sphereCubeMapDiffuse.transform;
-                    m_vertexsDiffuse.Add(vert);
-                    vert.moveTo(new Vector3(1, 0, 0));
-                    updateColor(vert, coefficientsTexture, 1);// (1.0f / m_vertexs.Count));
-                }
-            }
-        }
-        if (iterationCountOld != iterationCount)
-        {
-            iterationCountOld = iterationCount;
-            for (int i = m_vertexs.Count - 1; i >= 0; i--)
-            {
-                GameObject.Destroy(m_vertexs[i].gameObject);
-            }
-            m_vertexs.Clear();
-            for (float i = 0; i < iterationCount; i++)
-            {
-                for (float j = 0; j < iterationCount * 2; j++)
-                {
-                    float alpha = ((i + 1) / (iterationCount + 1)) * (3.14f);
-                    float beta = ((j) / (iterationCount * 2)) * (3.14f * 2);
-                    var vert = Instantiate<KVertex>(P_VERTEX);
                     vert.alpha = alpha;
                     vert.beta = beta;
-                    vert.transform.parent = m_sphereCubeMap.transform;
-                    m_vertexs.Add(vert);
-                    vert.moveTo(new Vector3(-1, 0, 0));
-                    updateColor(vert, m_texture);
+                    m_vertexsDiffuse.Add(vert);
+                    vert.moveTo(new Vector3(0, 0, 0));
+                    updateColor1(vert, coefficientsTexture);
+                    //updateColor1(vert, exampleGraceCathedral);
                 }
             }
 
-            List<Vector3> coefficients = new List<Vector3>();
-            for (int i = 0; i < 9; i++) coefficients.Add(new Vector3());
 
-            float fwt = 0; //weights of all faces
-            foreach (var v in m_vertexs)
+
+
+
+            for (int i = m_vertexsDiffuse2.Count - 1; i >= 0; i--)
             {
-                float fU = 0;
-                float fV = 0;
-                var sphereSH = v.getSH();
-                var normal = v.Normal;
-                if (Mathf.Abs(normal.x) > Mathf.Abs(normal.y) && Mathf.Abs(normal.x) > Mathf.Abs(normal.z))
-                {
-                    if (normal.x > 0)
-                    {
-                        fU = (1 - normal.z) / 2.0f;
-                        fV = (1 - normal.y) / 2.0f;
-                    }
-                    else
-                    {
-                        fU = (1 + normal.z) / 2.0f;
-                        fV = (1 - normal.y) / 2.0f;
-
-                    }
-                }
-                else if (Mathf.Abs(normal.y) > Mathf.Abs(normal.x) && Mathf.Abs(normal.y) > Mathf.Abs(normal.z))
-                {
-                    continue;
-                }
-                else if (Mathf.Abs(normal.z) > Mathf.Abs(normal.x) && Mathf.Abs(normal.z) > Mathf.Abs(normal.y))
-                {
-                    if(normal.z > 0)
-                    {
-                        fU = (1 + normal.x) / 2.0f;
-                        fV = (1 - normal.y) / 2.0f;
-                    }
-                    else
-                    {
-                        fU = (1 - normal.x) / 2.0f;
-                        fV = (1 - normal.y) / 2.0f;
-
-                    }
-                }
-                else
-                {
-                    Debug.Log("Unknown case");
-                }
-                Debug.Log(fU + " , " + fV);
-                normal.Normalize();
-                float fDiffSolid = 4.0f / ((1.0f + fU * fU + fV * fV) *
-                                       Mathf.Sqrt(1.0f + fU * fU + fV * fV));
-                fwt += fDiffSolid;
-                for (int i = 0; i < 9; i++) coefficients[i] += (v.m_color) * fDiffSolid * sphereSH[i];
-
+                GameObject.Destroy(m_vertexsDiffuse2[i].gameObject);
             }
-            Debug.Log("FWT " +fwt);
-            float fNormProj = (4.0f * Mathf.PI) / fwt;
-            for (int i = 0; i < 9; i++) coefficients[i] *= fNormProj;
-            for (int i = 0; i < 9; i++) Debug.Log("COEFFICIENTS " + i + " : " + coefficients[i]);
-            //for (int i = 0; i < 9; i++) Debug.Log("COEFFICIENTS " + i + " : " + (coefficients[i].x / m_vertexs.Count)
-            //   + " , " + (coefficients[i].y / m_vertexs.Count) + " , " + (coefficients[i].z / m_vertexs.Count)
-            //
-            //   );
-
-            coefficientsTexture = coefficients;
+            m_vertexsDiffuse2.Clear();
+            for (float i = 0; i < diffuseVertexCount; i++)
+            {
+                for (float j = 0; j < diffuseVertexCount * 2; j++)
+                {
+                    float alpha = ((i + 1) / (diffuseVertexCount + 1)) * (3.14f);
+                    float beta = ((j) / (diffuseVertexCount * 2)) * (3.14f * 2);
+                    var vert = Instantiate<KVertex>(P_VERTEX);
+                     vert.transform.parent = m_sphereDiffuse2.transform;
+                    vert.alpha = alpha;
+                    vert.beta = beta;
+                    m_vertexsDiffuse2.Add(vert);
+                    vert.moveTo(new Vector3(2, 0, 0));
+                    updateColor2(vert, coefficientsTexture);
+                    //updateColor2(vert, exampleGraceCathedral);
+                }
+            }
         }
 
     }
