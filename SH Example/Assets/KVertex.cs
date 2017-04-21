@@ -44,7 +44,8 @@ public class KVertex : MonoBehaviour {
         float Y21 = 1.092548f * normal.x * normal.z;
         float Y2_1 = 1.092548f * normal.y * normal.z;
         float Y2_2 = 1.092548f * normal.y * normal.x;
-        float Y20 = 0.946176f * normal.z * normal.z - 0.315392f;
+        //float Y20 = 0.946176f * normal.z * normal.z - 0.315392f;
+        float Y20 = 0.315392f * (3 * normal.z * normal.z - 1);// - 0.315392f;
         float Y22 = 0.546274f * (normal.x * normal.x - normal.y * normal.y);
         HS.Add(Y00);
         HS.Add(Y1_1);

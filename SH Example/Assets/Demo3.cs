@@ -75,6 +75,8 @@ public class Demo3 : MonoBehaviour
 
         return SolidAngle;
     }
+
+    float solidAngleTotal = 0;
     KVertex createSphereAre(int face, int surfaceDividedBy, float u, float v, float pixelSize, List<Vector3> coefficients)
     {
         var vertex = Instantiate<KVertex>(P_VERTEX);
@@ -113,6 +115,7 @@ public class Demo3 : MonoBehaviour
         const float A2 = 1.0f; //0.785398f;
 
         float domega = TexelCoordSolidAngle2(u, v, surfaceDividedBy);
+        solidAngleTotal += domega;
         coefficients[0] += 0.282095f * A0 * domega * vertex.m_color;
 
         // Band 1
@@ -132,9 +135,9 @@ public class Demo3 : MonoBehaviour
     void updateColor1(KVertex vertex, List<Vector3> coefficients)
     {
         var vertexSH = vertex.getSH();
-        float a0 = 3.141593f;
-        float a1 = 2.094395f;
-        float a2 = 0.785398f;
+        float a0 = 1;//athf.PI;// 1;//3.141593f;
+        float a1 = 1;//athf.PI*(2.0f/3); ;//2.094395f;
+        float a2 = 1;//Mathf.PI * (1.0f / 4);// 0.785398f;
 
         Vector3 color =
             a0 * vertexSH[0] * coefficients[0] +
@@ -149,7 +152,7 @@ public class Demo3 : MonoBehaviour
         //color *= 0.5f;
         vertex.setColor(new Color(color.x, color.y, color.z));
     }
-    void updateColor2(KVertex vertex, List<Vector3> coefficients)
+    void updateColor2(KVertex vertex, List<Vector3> coef)
     {
         /*
          * 
@@ -171,35 +174,51 @@ public class Demo3 : MonoBehaviour
         vertex.setColor(new Color(color.x, color.y, color.z));
          * */
         var vertexSH = vertex.getSH();
-        var normal = vertex.Normal;
-        float c1 = 0.429043f;
-        float c2 = 0.511665f;
-        float c3 = 0.743125f;
-        float c4 = 0.886227f;
-        float c5 = 0.247708f;
+        var N = vertex.Normal;
+        float C1 = 0.429043f;
+        float C2 = 0.511665f;
+        float C3 = 0.743125f;
+        float C4 = 0.886227f;
+        float C5 = 0.247708f;
 
-        var L00 = coefficients[0];
-        var L1_1 = coefficients[1];
-        var L10 = coefficients[2];
-        var L11 = coefficients[3];
-        var L2_2 = coefficients[4];
-        var L2_1 = coefficients[5];
-        var L20 = coefficients[6];
-        var L21 = coefficients[7];
-        var L22 = coefficients[8];
+        var L00 = coef[0];
+        var L1_1 = coef[1];
+        var L10 = coef[2];
+        var L11 = coef[3];
+        var L2_2 = coef[4];
+        var L2_1 = coef[5];
+        var L20 = coef[6];
+        var L21 = coef[7];
+        var L22 = coef[8];
 
-        Vector3 irradianceColor =
-            c1 * L22 * (normal.x * normal.x - normal.y * normal.y) +
-            c3 * L20 * (normal.z * normal.z) +
-            c4 * L00 -
-            c5 * L20 +
-            2 * c1 * (L2_2 * normal.x * normal.y + L21 * normal.x * normal.z + L2_1 * normal.y * normal.z) +
-            2 * c2 * (L11 * normal.x + L1_1 * normal.y + L10 * normal.z);
+          // constant term, lowest frequency //////
+          Vector3 color = C4 * coef[0] +
 
+          // axis aligned terms ///////////////////
+          2.0f * C2 * coef[1] * N.y +
+          2.0f * C2 * coef[2] * N.z +
+          2.0f * C2 * coef[3] * N.x +
 
-        vertex.setColor(new Color(irradianceColor.x, irradianceColor.y, irradianceColor.z));
+          // band 2 terms /////////////////////////
+          2.0f * C1 * coef[4] * N.x * N.y +
+          2.0f * C1 * coef[5] * N.y * N.z +
+          C3 * coef[6] * N.z * N.z - C5 * coef[6] +
+          2.0f * C1 * coef[7] * N.x * N.z +
+          C1 * coef[8] * (N.x * N.x - N.y * N.y);
+        
+    /*
+    Vector3 irradianceColor =
+        c1 * L22 * (N.x * N.x - N.y * N.y) +
+        c3 * L20 * (N.z * N.z) +
+        c4 * L00 -
+        c5 * L20 +
+        2 * c1 * (L2_2 * N.x * N.y + L21 * N.x * N.z + L2_1 * N.y * N.z) +
+        2 * c2 * (L11 * N.x + L1_1 * N.y + L10 * N.z);
 
-    }
+     * */
+    vertex.setColor(new Color(color.x, color.y, color.z));
+
+}
     // Update is called once per frame
     void Update()
     {
@@ -232,6 +251,7 @@ public class Demo3 : MonoBehaviour
                 Destroy(m_vertexs[i].gameObject);
             }
             m_vertexs.Clear();
+            solidAngleTotal = 0;
             coefficientsTexture = new List<Vector3>();
             for (int i = 0; i < 9; i++)
             {
@@ -254,9 +274,11 @@ public class Demo3 : MonoBehaviour
 
                     }
                 }
-
-
-
+            }
+            Debug.Log("Solidangle Total : " + solidAngleTotal);
+            for(int i = 0; i < 9; i++)
+            {
+                coefficientsTexture[i] *= (4*Mathf.PI)/ solidAngleTotal;
             }
             for (int i = 0; i < 9; i++) Debug.Log("Cof " + i + " : " + coefficientsTexture[i].x + " , " + coefficientsTexture[i].y + " , " + coefficientsTexture[i].z);
         }
